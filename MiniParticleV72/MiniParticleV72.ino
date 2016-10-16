@@ -276,7 +276,7 @@ String  StrDate() {
 String  StringDate(int yyy, int mmm, int ddd) {
   String ttt ;
   //nowT  = now;
-  ttt = print2digits(yyy-40) + "-" + print2digits(mmm) + "-" + print2digits(ddd) ;
+  ttt = print2digits(yyy-30) + "-" + print2digits(mmm) + "-" + print2digits(ddd) ;
   return ttt ;
 }
 

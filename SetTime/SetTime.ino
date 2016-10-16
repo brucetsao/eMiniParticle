@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <Time.h>
-#include <DS1307RTC.h>
+#include "RTClib.h"
+RTC_DS1307 RTC;
 
 const char *monthName[12] = {
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",

@@ -14,9 +14,9 @@
  In this example, we only use Serial to get PM 2.5 value.
 
  The circuit:
-  * RX is digital pin 3 (connect to TX of PMS 3003)
- * TX is digital pin 2 (connect to RX of PMS 3003)
- * 
+ * RX is digital pin 0 (connect to TX of PMS 3003)
+ * TX is digital pin 1 (connect to RX of PMS 3003)
+
  */
 // OLED_I2C_Graph_Demo
 // Copyright (C)2015 Rinky-Dink Electronics, Henning Karlsen. All right reserved
@@ -56,19 +56,10 @@
 // to the pins used, and you will also have to use appropriate, external
 // pull-up resistors on the data and clock signals.
 //
-
-#define DHTSensorPin 7
 #include <Arduino.h>
-#include <Time.h>
-#include <DS1307RTC.h>
+#include <Wire.h>  // Arduino IDE 內建
 #include <String.h> 
-
 #include <OLED_I2C.h>
-#include "DHT.h"
-// Uncomment whatever type you're using!
-//#define DHTTYPE DHT11   // DHT 11
-#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
-//#define DHTTYPE DHT21   // DHT 21 (AM2301)
 
 
 
@@ -84,24 +75,35 @@ SoftwareSerial mySerial(RX, TX); // RX, TX
 */    
 //SoftwareSerial(rxPin, txPin, inverse_logic)
 SoftwareSerial mySerial(2, 3); // RX, TX
-#define pmsDataLen 22
+//char ssid[] = "TSAO";      // your network SSID (name)
+//char pass[] = "TSAO1234";     // your network password
+int keyIndex = 0;               // your network key Index number (needed only for WEP)
+
+
+#define pmsDataLen 30
 char bufHead[2];
 char buf[pmsDataLen];
 int idx = 0;
 int pm10 = 0;
 int pm25 = 0;
 int pm100 = 0;
+uint16_t PM01Value=0;          //define PM1.0 value of the air detector module
+uint16_t PM2_5Value=0;         //define PM2.5 value of the air detector module
+uint16_t PM10Value=0;         //define PM10 value of the air detector module
+String MacAddress ;
 OLED  myOLED(SDA, SCL, 8);
 extern uint8_t SmallFont[];
 
-DHT dht(DHTSensorPin, DHTTYPE);
+#include "Adafruit_SHT31.h"
+
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
 
 #if defined(ARDUINO_ARCH_SAMD)
 // for Zero, output on USB Serial console, remove line below if using programming port to program the Zero!
    #define Serial SerialUSB
 #endif
 
-  tmElements_t tm;
+
 void setup() {
   initSensor() ;
   DisplayClear() ;
@@ -111,10 +113,10 @@ void setup() {
 
 void loop() { // run over and over
   retrievePM25Value() ;
-   ShowDateTime() ;
+   
      ShowHumidity() ;
     myOLED.update();
-     delay(10000);
+     delay(6000);
 }
 
 
@@ -148,8 +150,21 @@ void retrievePM25Value() {
     }
   //    Serial.print(")\n") ;
   // check if data header is correct
+            Serial.print("\n\n Data Leng is :(");
+          Serial.print(mySerial.available()) ;
+          Serial.print(")\n") ;
   if (hasPm25Value) 
-      mySerial.readBytes(buf,pmsDataLen);
+      if (mySerial.available() >= 30)
+      {   
+            hasPm25Value = true ;
+            mySerial.readBytes(buf,pmsDataLen);
+            checkValue(buf,pmsDataLen) ;
+      }
+      else
+      {
+
+           hasPm25Value = false ;
+      }
       /*
       for (idx = 0 ; idx <pmsDataLen ; idx ++)
           {
@@ -183,8 +198,8 @@ void retrievePM25Value() {
 
 void ShowHumidity()
 {
-   float t = dht.readTemperature();
-  float h = dht.readHumidity();
+   float t = sht31.readTemperature();
+  float h = sht31.readHumidity();
   ShowNumber(String((int)t),70,20) ;
   ShowNumber(String((int)h),70,40) ;
    Serial.print("Temperature :(");
@@ -243,6 +258,10 @@ void initSensor()
      myOLED.begin();
   myOLED.setFont(SmallFont); 
   DisplayClear() ;
+    if (! sht31.begin(0x44)) 
+  {   // Set to 0x45 for alternate i2c addr
+    Serial.println("Couldn't find SHT31");
+  }
 
   
 }
@@ -254,61 +273,44 @@ void ShowScreen()
    ShowChar("PM10",4,48) ;
 }
 
-void ShowDateTime()
-{
-  RTC.read(tm) ;
- // Serial.println(tm.Year) ;
- // tm.Year = CalendarYrToTm(tm.Year);
-//  Serial.println(tm.Year) ;
-  Serial.println("--------------") ;
-    ShowChar(StrDate(),70,0) ;
-    ShowChar(StrTime(),70,10) ;
- //myOLED.update();
 
-}
-String  StrDate() {
-  String ttt ;
-  ttt = StringDate(tm.Year, tm.Month, tm.Day) ;
-  
-  return ttt ;
-}
-
-String  StringDate(int yyy, int mmm, int ddd) {
-  String ttt ;
-  //nowT  = now;
-  ttt = print2digits(yyy-30) + "-" + print2digits(mmm) + "-" + print2digits(ddd) ;
-  return ttt ;
-}
-
-
-String  StrTime() {
-  String ttt ;
-  ttt = StringTime(tm.Hour, tm.Minute, tm.Second) ;
-  return ttt ;
-}
-
-String  StringTime(int hhh, int mmm, int sss) {
-  String ttt ;
-  ttt = print2digits(hhh) + ":" + print2digits(mmm) + ":" + print2digits(sss) ;
-  return ttt ;
-}
-
-String  print2digits(int number) {
-  String ttt ;
-  if (number >= 0 && number < 10)
+char checkValue(char *thebuf, char leng)
+{  
+  char receiveflag=0;
+  int receiveSum=0;
+  int i=0;
+     Serial.print("\n") ;
+  for(i=2;i<leng-2;i++)
   {
-    ttt = String("0") + String(number);
+  receiveSum=receiveSum+int(thebuf[i]);
+    Serial.print(i) ;
+    Serial.print(" , ") ;
+    Serial.print(int(thebuf[i]),DEC) ;
+    Serial.print(" , ") ;
+    Serial.print(int(thebuf[i]),HEX) ;
+    Serial.print("\n") ;
+  }
+
+    Serial.print("Sum = ") ;
+    Serial.print(receiveSum) ;
+    Serial.print(" \n") ;
+
+    Serial.print("Sum(in the Data) = ") ;
+    Serial.print(int(thebuf[leng-2]),DEC) ;
+    Serial.print(" ,  ") ;
+    Serial.print(int(thebuf[leng-1]),DEC) ;
+    Serial.print(" \n") ;
+    
+  if(receiveSum==(int(thebuf[leng-2])*256+int(thebuf[leng-1])) ) //check the serial data 
+  {
+        Serial.println("Data is Correct") ;
+    receiveSum=0;
+    receiveflag=1;
   }
   else
   {
-    ttt = String(number);
+          Serial.println("Data is Wrong") ;
+  
   }
-  return ttt ;
+  return receiveflag;
 }
-
-String  print4digits(int number) {
-  String ttt ;
-  ttt = String(number);
-  return ttt ;
-}
-
